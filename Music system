@@ -1,0 +1,281 @@
+import pandas as pd
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+from scipy.sparse import csr_matrix
+
+
+
+# --- 1. Simulate Data (Replace with your actual data loading) ---
+
+# In a real scenario, you'd load this from a CSV, database, etc.
+
+# Data structure: UserID, SongID, Rating (or PlayCount)
+
+data = {
+
+    'user_id': [1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5],
+
+    'song_id': ['s1', 's2', 's3', 's1', 's4', 's2', 's3', 's5', 's1', 's4', 's5', 's2', 's5'],
+
+    'rating': [5, 4, 3, 4, 5, 5, 4, 3, 3, 4, 5, 4, 5] # 'rating' can be explicit or play counts
+
+}
+
+df = pd.DataFrame(data)
+
+
+
+print("Original Data:")
+
+print(df)
+
+print("-" * 30)
+
+
+
+# --- 2. Create User-Item Matrix ---
+
+# This matrix will have users as rows and songs as columns, with ratings as values.
+
+# If a user hasn't interacted with a song, the value will be NaN or 0.
+
+user_song_matrix = df.pivot_table(index='user_id', columns='song_id', values='rating').fillna(0)
+
+
+
+print("User-Song Matrix (first 5 rows):")
+
+print(user_song_matrix.head())
+
+print("-" * 30)
+
+
+
+# Convert the user-song matrix to a sparse matrix for efficiency
+
+user_song_sparse_matrix = csr_matrix(user_song_matrix.values)
+
+
+
+# --- 3. Calculate Item Similarity (Cosine Similarity) ---
+
+# We want to find songs that are similar to each other based on user interactions.
+
+# Transpose the matrix to calculate similarity between songs (columns)
+
+item_similarity = cosine_similarity(user_song_matrix.T)
+
+
+
+# Convert to a DataFrame for easier viewing and access
+
+item_similarity_df = pd.DataFrame(item_similarity, index=user_song_matrix.columns, columns=user_song_matrix.columns)
+
+
+
+print("Item Similarity Matrix (first 5x5):")
+
+print(item_similarity_df.head())
+
+print("-" * 30)
+
+
+
+# --- 4. Recommendation Function ---
+
+def recommend_songs(user_id, num_recommendations=5):
+
+    """
+
+    Recommends songs to a user based on their past interactions and item similarity.
+
+    This is a simplified item-item collaborative filtering approach.
+
+    """
+
+    if user_id not in user_song_matrix.index:
+
+        print(f"User {user_id} not found in the dataset.")
+
+        return []
+
+
+
+    # Get the songs the user has already rated/listened to
+
+    user_ratings = user_song_matrix.loc[user_id]
+
+    listened_songs = user_ratings[user_ratings > 0].index.tolist()
+
+
+
+    print(f"Songs listened to by user {user_id}: {listened_songs}")
+
+
+
+    # Initialize a dictionary to store recommendation scores for unlistened songs
+
+    recommendation_scores = {}
+
+
+
+    for listened_song in listened_songs:
+
+        # Get similar songs to the current listened song
+
+        similar_songs = item_similarity_df[listened_song].sort_values(ascending=False)
+
+
+
+        for song, similarity_score in similar_songs.items():
+
+            # Only consider songs the user hasn't listened to yet
+
+            if song not in listened_songs:
+
+                # Accumulate similarity scores (weighted by the user's rating for the listened song)
+
+                # A more sophisticated approach might use weighted averages or user-specific predictions.
+
+                recommendation_scores[song] = recommendation_scores.get(song, 0) + (similarity_score * user_ratings[listened_song])
+
+
+
+    # Sort the recommendations by score
+
+    recommended_songs = sorted(recommendation_scores.items(), key=lambda x: x[1], reverse=True)
+
+
+
+    # Filter out songs that have a very low score (optional, but good for noise reduction)
+
+    recommended_songs = [(song, score) for song, score in recommended_songs if score > 0]
+
+
+
+    return recommended_songs[:num_recommendations]
+
+
+
+# --- 5. Get Recommendations for a User ---
+
+user_to_recommend = 1
+
+recommended = recommend_songs(user_to_recommend)
+
+
+
+print(f"\nRecommended songs for User {user_to_recommend}:")
+
+if recommended:
+
+    for song, score in recommended:
+
+        print(f"  - Song: {song}, Score: {score:.2f}")
+
+else:
+
+    print("No recommendations found.")
+
+
+
+user_to_recommend = 3
+
+recommended = recommend_songs(user_to_recommend)
+
+
+
+print(f"\nRecommended songs for User {user_to_recommend}:")
+
+if recommended:
+
+    for song, score in recommended:
+
+        print(f"  - Song: {song}, Score: {score:.2f}")
+
+else:
+
+    print("No recommendations found.")
+
+
+
+# --- Content-Based Filtering (Conceptual Example) ---
+
+# This part is conceptual as it requires actual audio features or detailed metadata.
+
+# Let's say you have a DataFrame of song features:
+
+# song_features_df = pd.DataFrame({
+
+#     'song_id': ['s1', 's2', 's3', 's4', 's5'],
+
+#     'genre_pop': [1, 0, 1, 0, 1],
+
+#     'genre_rock': [0, 1, 0, 1, 0],
+
+#     'tempo': [120, 90, 130, 110, 100],
+
+#     'energy': [0.8, 0.4, 0.9, 0.7, 0.6]
+
+# }).set_index('song_id')
+
+
+
+# def recommend_content_based(user_id, num_recommendations=5):
+
+#     # Get user's liked songs (from user_song_matrix where rating > 0)
+
+#     user_liked_songs = user_song_matrix.loc[user_id][user_song_matrix.loc[user_id] > 0].index.tolist()
+
+
+
+#     if not user_liked_songs:
+
+#         print("User has no liked songs to base content recommendations on.")
+
+#         return []
+
+
+
+#     # Get features of liked songs
+
+#     liked_song_features = song_features_df.loc[user_liked_songs]
+
+
+
+#     # Calculate average feature vector for liked songs (user profile)
+
+#     user_profile = liked_song_features.mean()
+
+
+
+#     # Calculate similarity between user profile and all other songs
+
+#     # (e.g., using cosine similarity with all song features)
+
+#     # This would involve iterating through all songs, calculating similarity, and sorting.
+
+#     # This is a placeholder for the actual similarity calculation.
+
+#     # For example:
+
+#     # from sklearn.metrics.pairwise import cosine_similarity
+
+#     # all_song_features = song_features_df.values
+
+#     # similarities = cosine_similarity(user_profile.values.reshape(1, -1), all_song_features)
+
+
+
+#     # Then sort and recommend songs not already liked by the user.
+
+#     print(f"Content-based recommendation for user {user_id} (conceptual).")
+
+#     return [] # Placeholder
+
+
+
+# # Call the conceptual content-based function
+
+# # recommend_content_based(1)
